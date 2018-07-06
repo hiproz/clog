@@ -1,5 +1,5 @@
 # clog
-a log implementation in c.
+an implementation of logging in c.
 
 you can use it in you c/c++ project,espesially in the embedded system development.
 
