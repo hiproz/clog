@@ -1,5 +1,0 @@
-BasedOnStyle: llvm
-BreakBeforeBraces: Linux
-BreakBeforeBraces: Attach
-Language: Cpp
-ColumnLimit: 120
