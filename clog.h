@@ -1,46 +1,97 @@
-#ifndef __IDS_LOG_H__
-#define __IDS_LOG_H__
+#ifndef __CLOG_H__
+#define __CLOG_H__
 
 // clang-format off
-#include "usr_common.h"
-#include "usr_uart.h"
-// clang-format on
-/*****************************************************************************
-IDS: interface development suit
-,本接口的模块名，为避免变量和宏冲突，采用模块前缀的命名方式。
- *****************************************************************************/
-#define printf                                                                                                         \
-  memset(log_buf, 0, sizeof(log_buf));                                                                                 \
-  ids_printf
 
-#define log                                                                                                            \
-  \
-{                                                                                                                   \
-    memset(log_buf, 0, sizeof(log_buf));                                                                               \
-    char* p = strrchr(__FILE__, '\\');                                                                                 \
+// clang-format on
+
+#ifndef ERROR
+#define ERROR 1
+#endif
+#ifndef SUCCESS
+#define SUCCESS 0
+#endif
+#ifndef BOOL
+#define BOOL int
+#endif
+#ifndef TRUE
+#define TRUE 1
+#endif
+#ifndef FALSE
+#define FALSE 0
+#endif
+
+#ifndef NULL
+#define NULL 0
+#endif
+
+#ifndef U8
+typedef unsigned char U8;
+#endif
+#ifndef S8
+typedef signed char S8;
+#endif
+#ifndef U16
+typedef unsigned short U16;
+#endif
+#ifndef S16
+typedef signed short S16;
+#endif
+#ifndef U32
+typedef unsigned int U32;
+#endif
+#ifndef S32
+typedef signed int S32;
+#endif
+
+#define FREE_RTOS 1
+
+#if FREE_RTOS
+#define s ((xTaskGetTickCount() / configTICK_RATE_HZ))
+#define CLOG_YEAR 1
+#define CLOG_MONTH 1
+#define CLOG_DAY 1
+#define CLOG_WEEK 1
+#define CLOG_HOUR ((s % (3600 * 24)) / 3600)
+#define CLOG_MINUTE ((s % (3600)) / 60)
+#define CLOG_SECOND (s % 60)
+#endif
+
+// adapting the snprintf method
+#if APOLLO_SDK
+#define snprintf _snprintf
+#endif
+#define CLOG_BUF_SIZE 768
+
+#define clog                                                                                                           \
+  {                                                                                                                    \
+    memset(clog_buf, 0, sizeof(clog_buf));                                                                             \
+    char *p = strrchr(__FILE__, '\\');                                                                                 \
     if (p != NULL) {                                                                                                   \
-      _snprintf(log_buf, sizeof(log_buf), "%02u/%02u/%02u %02u:%02u:%02u %s:%d ", hal_time.ui32Year,                   \
-                hal_time.ui32Month, hal_time.ui32DayOfMonth, hal_time.ui32Hour, hal_time.ui32Minute,                   \
-                hal_time.ui32Second, strrchr(__FILE__, '\\') + 1, __LINE__);                                           \
+      snprintf(clog_buf, sizeof(clog_buf), "%02u/%02u/%02u %02u:%02u:%02u %s:%d ", CLOG_YEAR, CLOG_MONTH, CLOG_DAY,    \
+               CLOG_HOUR, CLOG_MINUTE, CLOG_SECOND, strrchr(__FILE__, '\\') + 1, __LINE__);                            \
     } else {                                                                                                           \
-      _snprintf(log_buf, sizeof(log_buf), "%02u/%02u/%02u %02u:%02u:%02u %s:%d ", hal_time.ui32Year,                   \
-                hal_time.ui32Month, hal_time.ui32DayOfMonth, hal_time.ui32Hour, hal_time.ui32Minute,                   \
-                hal_time.ui32Second, strrchr(__FILE__, '/') + 1, __LINE__);                                            \
+      snprintf(clog_buf, sizeof(clog_buf), "%02u/%02u/%02u %02u:%02u:%02u %s:%d ", CLOG_YEAR, CLOG_MONTH, CLOG_DAY,    \
+               CLOG_HOUR, CLOG_MINUTE, CLOG_SECOND, strrchr(__FILE__, '/') + 1, __LINE__);                             \
     }                                                                                                                  \
-  \
-}                                                                                                                   \
-  ids_log
+  }                                                                                                                    \
+  _clog
 /*******************************************************
 
  *********************************************************/
-typedef enum { INF, WAR, ERR, RUN, NONE } IDS_TRACE_LEVEL_EN;
+typedef enum {
 
-extern char log_buf[UART_SEND_BUF_SIZE];
+  INF,
+  WAR,
+  ERR,
+  RUN,
+  NONE
+} CLEVEL_EN;
 
-// void trace( level, module_type sth, kal_char *fmt, ...);
-void ids_printf(int log_level, char* fmt, ...);
-void ids_log(int log_level, char* fmt, ...);
-void ids_log_init(void);
-void ids_log_set_level(int level);
+extern char clog_buf[CLOG_BUF_SIZE];
+
+void _clog(int log_level, char *fmt, ...);
+void clog_init(void);
+void clog_set_level(int level);
 
 #endif
