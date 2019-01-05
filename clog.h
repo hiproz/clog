@@ -1,5 +1,10 @@
 #ifndef __CLOG_H__
 #define __CLOG_H__
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "string.h"
 //////////////////////////////depend on the platform 需要根据不同的平台适配////////////////
 #include "SEGGER_RTT.h"
@@ -38,4 +43,8 @@ void _clog(int log_level, char *fmt, ...);
 void clog_init(void);
 void clog_set_level(int level);
 
+#ifdef __cplusplus
+}
 #endif
+
+#endif 
