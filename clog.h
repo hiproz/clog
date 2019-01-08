@@ -4,7 +4,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+#include "stdio.h"
 #include "string.h"
 //////////////////////////////depend on the platform 需要根据不同的平台适配////////////////
 #include "SEGGER_RTT.h"
