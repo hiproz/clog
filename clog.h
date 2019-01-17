@@ -21,7 +21,7 @@ extern "C" {
 extern void clog_get_datetime(unsigned char *datetime);
 ////////////////////////////////////////////////////////////////////
 
-#define CLOG_BUF_SIZE 768
+#define CLOG_BUF_SIZE 256
 extern char clog_buf[CLOG_BUF_SIZE];
 
 // clang-format off
