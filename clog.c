@@ -6,15 +6,13 @@ int clog_level = INF;
 char clog_buf[CLOG_BUF_SIZE] = {0};
 
 void _clog(int log_level, char *fmt, ...) {
-  if (fmt == 0 || strlen(fmt) == 0)
+  if (log_level == NONE || fmt == 0 || strlen(fmt) == 0)
     return;
 
   if (log_level >= clog_level) {
     // log level filter
     if (log_level == INF) {
       strcat(clog_buf, "[INF] ");
-    } else if (log_level == DBG) {
-      strcat(clog_buf, "[DBG] ");
     } else if (log_level == WAR) {
       strcat(clog_buf, "[WAR] ");
     } else if (log_level == RUN) {
@@ -23,7 +21,6 @@ void _clog(int log_level, char *fmt, ...) {
       strcat(clog_buf, "[ERR] ");
     } else {
       //do nothing
-      return;
     }
 
     va_list args;

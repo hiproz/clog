@@ -9,7 +9,7 @@ extern "C" {
 //////////////////////////////depend on the platform 需要根据不同的平台适配////////////////
 #define log clog
 
-#define ENABLE_RTT
+//#define ENABLE_RTT
 #ifdef ENABLE_RTT
 #include "SEGGER_RTT.h"
 #define printf(fmt, ...) SEGGER_RTT_printf(0, fmt, ##__VA_ARGS__)
@@ -40,7 +40,6 @@ extern char clog_buf[CLOG_BUF_SIZE];
 
 typedef enum {
   INF,
-	DBG,
   WAR,
   ERR,
   RUN,
