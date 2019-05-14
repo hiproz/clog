@@ -15,27 +15,47 @@ extern "C" {
 #define printf(fmt, ...) SEGGER_RTT_printf(0, fmt, ##__VA_ARGS__)
 #endif
 
+//#define ENABLE_DATETIME
+#ifdef ENABLE_DATETIME
 // it is variaty that every platform get the rtc time。
 // 每个平台获取时间的实现都有所不同。
 // datetime :为长度为6的字节数组，返回年月日时分秒
 extern void clog_get_datetime(unsigned char *datetime);
 ////////////////////////////////////////////////////////////////////
+#endif
 
+//todo 要根据目标uart的发送bufer长度实际调整
 #define CLOG_BUF_SIZE 256
 extern char clog_buf[CLOG_BUF_SIZE];
 
 // clang-format off
+#ifdef ENABLE_DATETIME
 #define clog { \
     unsigned char datetime[6] = {0}; \
     clog_get_datetime(datetime); \
     memset(clog_buf, 0, sizeof(clog_buf)); \
     char *p = strrchr(__FILE__, '\\');  \
     if (p != NULL) { \
-      snprintf(clog_buf, CLOG_BUF_SIZE - 1, "%02u/%02u/%02u %02u:%02u:%02u %s:%d ", datetime[0], datetime[1], datetime[2], datetime[3], datetime[4], datetime[5], strrchr(__FILE__, '\\') + 1, __LINE__); \
+      snprintf(clog_buf, CLOG_BUF_SIZE - 1, "%02u/%02u/%02u %02u:%02u:%02u %s:%d ", \
+      datetime[0], datetime[1], datetime[2], datetime[3], datetime[4], datetime[5], strrchr(__FILE__, '\\') + 1, __LINE__); \
     } else { \
-      snprintf(clog_buf, CLOG_BUF_SIZE - 1, "%02u/%02u/%02u %02u:%02u:%02u %s:%d ", datetime[0], datetime[1], datetime[2], datetime[3], datetime[4], datetime[5], strrchr(__FILE__, '/') + 1, __LINE__); \
+      snprintf(clog_buf, CLOG_BUF_SIZE - 1, "%02u/%02u/%02u %02u:%02u:%02u %s:%d ", \
+      datetime[0], datetime[1], datetime[2], datetime[3], datetime[4], datetime[5], strrchr(__FILE__, '/') + 1, __LINE__); \
     } \
   } _clog
+#else
+#define clog { \
+    memset(clog_buf, 0, sizeof(clog_buf)); \
+    char *p = strrchr(__FILE__, '\\');  \
+    if (p != NULL) { \
+      snprintf(clog_buf, CLOG_BUF_SIZE - 1, "%s:%d ", \
+      strrchr(__FILE__, '\\') + 1, __LINE__); \
+    } else { \
+      snprintf(clog_buf, CLOG_BUF_SIZE - 1, "%s:%d ", \
+      strrchr(__FILE__, '/') + 1, __LINE__); \
+    } \
+  } _clog
+#endif
 // clamg-format on
 
 typedef enum {
@@ -55,3 +75,4 @@ void clog_set_level(int level);
 #endif
 
 #endif 
+

@@ -4,7 +4,7 @@
 
 int clog_level = INF;
 char clog_buf[CLOG_BUF_SIZE] = {0};
-
+extern void clog_printf(char *);
 void _clog(int log_level, char *fmt, ...) {
   if (log_level == NONE || fmt == 0 || strlen(fmt) == 0)
     return;
@@ -28,16 +28,13 @@ void _clog(int log_level, char *fmt, ...) {
     vsnprintf(clog_buf + strlen(clog_buf), sizeof(clog_buf) - 1 - strlen(clog_buf), fmt, args);
     va_end(args);
 
-    printf(clog_buf);
+    clog_printf(clog_buf);
   }
 }
 
 // init the clog, put some initialize or resource option in here
-void clog_init(void) {
-  clog_level = INF;
-}
+void clog_init(void) { clog_level = INF; }
 
 // set the log level filter
-void clog_set_level(int level) {
-  clog_level = level;
-}
+void clog_set_level(int level) { clog_level = level; }
+
