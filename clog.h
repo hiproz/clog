@@ -6,26 +6,25 @@ extern "C" {
 #endif
 #include "stdio.h"
 #include "string.h"
-//////////////////////////////depend on the platform 需要根据不同的平台适配////////////////
-#define log clog
 
-//#define ENABLE_RTT
+#define ENABLE_RTT
 #ifdef ENABLE_RTT
 #include "SEGGER_RTT.h"
-#define printf(fmt, ...) SEGGER_RTT_printf(0, fmt, ##__VA_ARGS__)
+#define clog_printf(fmt, ...) SEGGER_RTT_printf(0, fmt, ##__VA_ARGS__)
 #endif
 
-//#define ENABLE_DATETIME
+////////////depend on the platform 需要根据不同的平台适配/////////////
+#define ENABLE_DATETIME
 #ifdef ENABLE_DATETIME
 // it is variaty that every platform get the rtc time。
 // 每个平台获取时间的实现都有所不同。
 // datetime :为长度为6的字节数组，返回年月日时分秒
 extern void clog_get_datetime(unsigned char *datetime);
-////////////////////////////////////////////////////////////////////
 #endif
+////////////////////////////////////////////////////////////////////
 
 //todo 要根据目标uart的发送bufer长度实际调整
-#define CLOG_BUF_SIZE 256
+#define CLOG_BUF_SIZE 128
 extern char clog_buf[CLOG_BUF_SIZE];
 
 // clang-format off
@@ -37,10 +36,10 @@ extern char clog_buf[CLOG_BUF_SIZE];
     char *p = strrchr(__FILE__, '\\');  \
     if (p != NULL) { \
       snprintf(clog_buf, CLOG_BUF_SIZE - 1, "%02u/%02u/%02u %02u:%02u:%02u %s:%d ", \
-      datetime[0], datetime[1], datetime[2], datetime[3], datetime[4], datetime[5], strrchr(__FILE__, '\\') + 1, __LINE__); \
+      datetime[5], datetime[4], datetime[3], datetime[2], datetime[1], datetime[0], strrchr(__FILE__, '\\') + 1, __LINE__); \
     } else { \
       snprintf(clog_buf, CLOG_BUF_SIZE - 1, "%02u/%02u/%02u %02u:%02u:%02u %s:%d ", \
-      datetime[0], datetime[1], datetime[2], datetime[3], datetime[4], datetime[5], strrchr(__FILE__, '/') + 1, __LINE__); \
+      datetime[5], datetime[4], datetime[3], datetime[2], datetime[1], datetime[0], strrchr(__FILE__, '/') + 1, __LINE__); \
     } \
   } _clog
 #else
@@ -64,7 +63,7 @@ typedef enum {
   ERR,
   RUN,
   NONE
-} CLEVEL_EN;
+} LOG_LEVEL_EN;
 
 void _clog(int log_level, char *fmt, ...);
 void clog_init(void);
