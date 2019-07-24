@@ -24,7 +24,7 @@ extern void clog_get_datetime(unsigned char *datetime);
 ////////////////////////////////////////////////////////////////////
 
 //todo 要根据目标uart的发送bufer长度实际调整
-#define CLOG_BUF_SIZE 128
+#define CLOG_BUF_SIZE 512
 extern char clog_buf[CLOG_BUF_SIZE];
 
 // clang-format off
@@ -66,8 +66,11 @@ typedef enum {
 } LOG_LEVEL_EN;
 
 void _clog(int log_level, char *fmt, ...);
+void clog_hex(uint8_t * data, uint16_t len);
 void clog_init(void);
 void clog_set_level(int level);
+int clog_get_level(void);
+void clog_str_hex(uint8_t *data, uint16_t len);
 
 #ifdef __cplusplus
 }
