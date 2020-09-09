@@ -7,38 +7,45 @@ extern "C" {
 #include "stdio.h"
 #include "string.h"
 
-#define ENABLE_RTT
+//#define ENABLE_RTT // use rtt for clog
 #ifdef ENABLE_RTT
 #include "SEGGER_RTT.h"
 #define clog_printf(fmt, ...) SEGGER_RTT_printf(0, fmt, ##__VA_ARGS__)
 #endif
 
+#define RDA8910_CSDK  // used in rda8910_csdk
+#ifdef RDA8910_CSDK
+#include "iot_debug.h"
+#include "am_openat.h"
+#define clog_printf IVTBL(print)
+#endif
+
 // log level defination
-#define INF  0
-#define WAR  1
-#define ERR  2
-#define RUN  3
-#define UL1  4
-#define UL2  5
-#define UL3  6
-#define NONE 7
-#define DIS  8
+// LL:clog level
+#define LL_INF  0  // some infos
+#define LL_WAR  1  // warrnings
+#define LL_ERR  2  // errors
+#define LL_RUN  3  // some important running logs
+#define LL_NONE 4  // disable all the logs
 
 ///////////////////////// setting before build /////////////////////////
 // 日志开关
-#define LOG_LEVEL INF  // 日志级别，此级别下的log不打印
+#define LOG_LEVEL LL_INF  // 日志级别，此级别下的log不打印
+
 // 日志编译级别
-#define BUILD_LOG_LEVEL INF  // 编译级别，此级别下的log打印代码不参与编译,默认设置为RUN
+#define BUILD_LOG_LEVEL LL_INF  // 编译级别，此级别下的log打印代码不参与编译,默认设置为RUN
+
 // 日志是否支持显示RTC时间
 #define ENABLE_DATETIME 0
 ////////////////////////////////////////////////////////
-////////////depend on the platform 需要根据不同的平台适配/////////////
-#if ENABLE_DATETIME
+
+#if ENABLE_DATETIME  //depend on the platform 需要根据不同的平台适配
 // it is variaty that every platform get the rtc time。
 // 每个平台获取时间的实现都有所不同。
 // datetime :为长度为6的字节数组，返回年月日时分秒
 extern void clog_get_datetime(unsigned char* datetime);
 #endif
+
 // 发送bufer长度实际调整
 #define CLOG_BUF_SIZE 512
 extern char clog_buf[CLOG_BUF_SIZE];
@@ -60,7 +67,7 @@ extern char clog_buf[CLOG_BUF_SIZE];
 
 #define CLOG_FORMAT { \
   memset(clog_buf, 0, sizeof(clog_buf)); \
-  char *p = strrchr(__FILE__, '\\');  \
+  char *p = strrchr(__FILE__, '\\'); \
   if (p != NULL) { \
     snprintf(clog_buf, CLOG_BUF_SIZE - 1, "[%s:%d] ", \
     strrchr(__FILE__, '\\') + 1, __LINE__); \
@@ -71,104 +78,110 @@ extern char clog_buf[CLOG_BUF_SIZE];
 }
 
 
-#define _MACRO_SPLICE(x,y) x##y
 
+#ifdef RDA8910_CSDK
+#define _MACRO_SPLICE(x) x
+#define MACRO_SPLICE(x,y) ({_MACRO_SPLICE(x)_MACRO_SPLICE(y);})
+#else
+#define _MACRO_SPLICE(x,y) x##y
 #define MACRO_SPLICE(x,y) _MACRO_SPLICE(x,y)
+#endif
 
 // info log
-#if (INF >= BUILD_LOG_LEVEL)
+#if (LL_INF >= BUILD_LOG_LEVEL)
 #if ENABLE_DATETIME
-#define clog_inf(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(INF,fmt,##__VA_ARGS__))
+#define clog_inf(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(LL_INF,fmt,##__VA_ARGS__))
 #else
-#define clog_inf(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(INF,fmt,##__VA_ARGS__))
+#define clog_inf(fmt,...)  MACRO_SPLICE(CLOG_FORMAT, _clog(LL_INF, fmt, ##__VA_ARGS__))
 #endif
 #else
 #define clog_inf(...)
 #endif
 
+
 // warning log
-#if (WAR >= BUILD_LOG_LEVEL)
+#if (LL_WAR >= BUILD_LOG_LEVEL)
 #if ENABLE_DATETIME
-#define clog_war(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(WAR,fmt,##__VA_ARGS__))
+#define clog_war(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(LL_WAR,fmt,##__VA_ARGS__))
 #else
-#define clog_war(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(WAR,fmt,##__VA_ARGS__))
+#define clog_war(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(LL_WAR,fmt,##__VA_ARGS__))
 #endif
 #else
 #define clog_war(...)
 #endif
 
 // error log
-#if (ERR >= BUILD_LOG_LEVEL)
+#if (LL_ERR >= BUILD_LOG_LEVEL)
 #if ENABLE_DATETIME
-#define clog_err(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(ERR,fmt,##__VA_ARGS__))
+#define clog_err(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(LL_ERR,fmt,##__VA_ARGS__))
 #else
-#define clog_err(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(ERR,fmt,##__VA_ARGS__))
+#define clog_err(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(LL_ERR,fmt,##__VA_ARGS__))
 #endif
 #else
 #define clog_err(...)
 #endif
 
 // running log
-#if (RUN >= BUILD_LOG_LEVEL)
+#if (LL_RUN >= BUILD_LOG_LEVEL)
 #if ENABLE_DATETIME
-#define clog_run(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(RUN,fmt,##__VA_ARGS__))
+#define clog_run(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(LL_RUN,fmt,##__VA_ARGS__))
 #else
-#define clog_run(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(RUN,fmt,##__VA_ARGS__))
+#define clog_run(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(LL_RUN,fmt,##__VA_ARGS__))
 #endif
 #else
 #define clog_run(...)
 #endif
-
-// user define level 1
-#if (UL1 >= BUILD_LOG_LEVEL)
-#if ENABLE_DATETIME
-#define clog_ul1(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(UL1,fmt,##__VA_ARGS__))
-#else
-#define clog_ul1(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(UL1,fmt,##__VA_ARGS__))
-#endif
-#else
-#define clog_ul1(...)
-#endif
-
-// user define level 2
-#if (UL2 >= BUILD_LOG_LEVEL)
-#if ENABLE_DATETIME
-#define clog_ul2(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(UL2,fmt,##__VA_ARGS__))
-#else
-#define clog_ul2(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(UL2,fmt,##__VA_ARGS__))
-#endif
-#else
-#define clog_ul2(...)
-#endif
-
-// user define level 3
-#if (UL3 >= BUILD_LOG_LEVEL)
-#if ENABLE_DATETIME
-#define clog_ul3(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(UL3,fmt,##__VA_ARGS__))
-#else
-#define clog_ul3(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(UL3,fmt,##__VA_ARGS__))
-#endif
-#else
-#define clog_ul3(...)
-#endif
-
-// display level
-#if (DIS >= BUILD_LOG_LEVEL)
-#if ENABLE_DATETIME
-#define clog_dis(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(DIS,fmt,##__VA_ARGS__))
-#else
-#define clog_dis(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(DIS,fmt,##__VA_ARGS__))
-#endif
-#else
-#define clog_dis(...)
-#endif
 // clang-format on
 
 void _clog(int log_level, char* fmt, ...);
-void clog_hex(int level, uint8_t* data, uint16_t len);
+
+///////////////////////////////////////////////////////////////////////
+/**
+ * @brief externed fuctions
+ *
+ */
+
+/**
+ * clog_inf();
+ * clog_war();
+ * clog_err();
+ * clog_run();
+ */
+
+/**
+ * @brief init the log
+ *
+ */
 void clog_init(void);
+
+/**
+ * @brief set the log level
+ *
+ * @param level reference to the macros :LL_INF...
+ */
 void clog_set_level(int level);
-int  clog_get_level(void);
+
+/**
+ * @brief get the log level
+ *
+ * @return int
+ */
+int clog_get_level(void);
+/**
+ * @brief  show all the data to hex format
+ *
+ * @param level log levels,reference to the macros :LL_INF...
+ * @param data: the data to show
+ * @param len: the data's length
+ */
+void clog_hex(int level, uint8_t* data, uint16_t len);
+/**
+ * @brief: if the byte is char, show charactor, if not, show to hex
+ *
+* @param level log levels,reference to the macros :LL_INF...
+ * @param data: the data to show
+ * @param len: the data's length
+ */
 void clog_str_hex(int level, uint8_t* data, uint16_t len);
 
 #ifdef __cplusplus
