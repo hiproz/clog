@@ -1,9 +1,12 @@
+// https://github.com/hiproz/clog.git
+
 #ifndef __CLOG_H__
 #define __CLOG_H__
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 #include "stdio.h"
 #include "string.h"
 
@@ -29,6 +32,9 @@ extern "C" {
 #define LL_NONE 4  // disable all the logs
 
 ///////////////////////// setting before build /////////////////////////
+// 发送bufer长度实际调整
+#define CLOG_BUF_SIZE 512
+
 // 日志开关
 #define LOG_LEVEL LL_INF  // 日志级别，此级别下的log不打印
 
@@ -38,7 +44,6 @@ extern "C" {
 // 日志是否支持显示RTC时间
 #define ENABLE_DATETIME 0
 ////////////////////////////////////////////////////////
-
 #if ENABLE_DATETIME  //depend on the platform 需要根据不同的平台适配
 // it is variaty that every platform get the rtc time。
 // 每个平台获取时间的实现都有所不同。
@@ -46,15 +51,12 @@ extern "C" {
 extern void clog_get_datetime(unsigned char* datetime);
 #endif
 
-// 发送bufer长度实际调整
-#define CLOG_BUF_SIZE 512
-extern char clog_buf[CLOG_BUF_SIZE];
-/////////////////////////////////////////////////////////
 // clang-format off
 #define CLOG_FORMAT_WITH_TIME { \
+  if(clog_init()) break; \
   unsigned char datetime[6]={0}; \
   clog_get_datetime(datetime); \
-  memset(clog_buf, 0, sizeof(clog_buf)); \
+  memset(clog_buf, 0, CLOG_BUF_SIZE); \
   char *p = strrchr(__FILE__, '\\');  \
   if (p != NULL) { \
     snprintf(clog_buf, CLOG_BUF_SIZE - 1, "[%02u/%02u/%02u %02u:%02u:%02u] [%s:%d] ", \
@@ -66,7 +68,8 @@ extern char clog_buf[CLOG_BUF_SIZE];
 }
 
 #define CLOG_FORMAT { \
-  memset(clog_buf, 0, sizeof(clog_buf)); \
+  if(clog_init()) break; \
+  memset(clog_buf, 0, CLOG_BUF_SIZE); \
   char *p = strrchr(__FILE__, '\\'); \
   if (p != NULL) { \
     snprintf(clog_buf, CLOG_BUF_SIZE - 1, "[%s:%d] ", \
@@ -81,7 +84,7 @@ extern char clog_buf[CLOG_BUF_SIZE];
 
 #ifdef RDA8910_CSDK
 #define _MACRO_SPLICE(x) x
-#define MACRO_SPLICE(x,y) ({_MACRO_SPLICE(x)_MACRO_SPLICE(y);})
+#define MACRO_SPLICE(x,y) _MACRO_SPLICE(x)_MACRO_SPLICE(y)
 #else
 #define _MACRO_SPLICE(x,y) x##y
 #define MACRO_SPLICE(x,y) _MACRO_SPLICE(x,y)
@@ -92,7 +95,7 @@ extern char clog_buf[CLOG_BUF_SIZE];
 #if ENABLE_DATETIME
 #define clog_inf(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(LL_INF,fmt,##__VA_ARGS__))
 #else
-#define clog_inf(fmt,...)  MACRO_SPLICE(CLOG_FORMAT, _clog(LL_INF, fmt, ##__VA_ARGS__))
+#define clog_inf(fmt,...)  do{MACRO_SPLICE(CLOG_FORMAT, _clog(LL_INF, fmt, ##__VA_ARGS__));}while(0)
 #endif
 #else
 #define clog_inf(...)
@@ -104,7 +107,7 @@ extern char clog_buf[CLOG_BUF_SIZE];
 #if ENABLE_DATETIME
 #define clog_war(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(LL_WAR,fmt,##__VA_ARGS__))
 #else
-#define clog_war(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(LL_WAR,fmt,##__VA_ARGS__))
+#define clog_war(fmt,...)  do{MACRO_SPLICE(CLOG_FORMAT, _clog(LL_WAR, fmt, ##__VA_ARGS__));}while(0)
 #endif
 #else
 #define clog_war(...)
@@ -115,7 +118,7 @@ extern char clog_buf[CLOG_BUF_SIZE];
 #if ENABLE_DATETIME
 #define clog_err(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(LL_ERR,fmt,##__VA_ARGS__))
 #else
-#define clog_err(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(LL_ERR,fmt,##__VA_ARGS__))
+#define clog_err(fmt,...)  do{MACRO_SPLICE(CLOG_FORMAT, _clog(LL_ERR, fmt, ##__VA_ARGS__));}while(0)
 #endif
 #else
 #define clog_err(...)
@@ -126,7 +129,7 @@ extern char clog_buf[CLOG_BUF_SIZE];
 #if ENABLE_DATETIME
 #define clog_run(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(LL_RUN,fmt,##__VA_ARGS__))
 #else
-#define clog_run(fmt,...)  MACRO_SPLICE(CLOG_FORMAT,_clog(LL_RUN,fmt,##__VA_ARGS__))
+#define clog_run(fmt,...)  do{MACRO_SPLICE(CLOG_FORMAT, _clog(LL_RUN, fmt, ##__VA_ARGS__));}while(0)
 #endif
 #else
 #define clog_run(...)
@@ -149,10 +152,11 @@ void _clog(int log_level, char* fmt, ...);
  */
 
 /**
- * @brief init the log
+ * @brief ini the clog resource
  *
+ * @return int:0 success; other:failed
  */
-void clog_init(void);
+int clog_init(void);
 
 /**
  * @brief set the log level
@@ -183,6 +187,9 @@ void clog_hex(int level, uint8_t* data, uint16_t len);
  * @param len: the data's length
  */
 void clog_str_hex(int level, uint8_t* data, uint16_t len);
+
+////////////////////////////////////////////
+extern char* clog_buf;
 
 #ifdef __cplusplus
 }

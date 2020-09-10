@@ -1,10 +1,10 @@
-#include "stdio.h"
-#include "stdarg.h"
-#include "string.h"
+// https://github.com/hiproz/clog.git
+#include <stdlib.h>
+#include <stdarg.h>
 #include "clog.h"
 
-int  clog_level              = LOG_LEVEL;
-char clog_buf[CLOG_BUF_SIZE] = {0};
+int   clog_level = LOG_LEVEL;
+char* clog_buf   = NULL;
 //////////////////////////////////////////////
 
 void _clog(int log_level, char* fmt, ...) {
@@ -27,7 +27,7 @@ void _clog(int log_level, char* fmt, ...) {
 
     va_list args;
     va_start(args, fmt);
-    vsnprintf(clog_buf + strlen(clog_buf), sizeof(clog_buf) - 3 - strlen(clog_buf), fmt, args);
+    vsnprintf(clog_buf + strlen(clog_buf), CLOG_BUF_SIZE - 3 - strlen(clog_buf), fmt, args);
     strcat(clog_buf, "\r\n");
     va_end(args);
 
@@ -36,7 +36,18 @@ void _clog(int log_level, char* fmt, ...) {
 }
 
 // init the clog, put some initialize or resource option in here
-void clog_init(void) { clog_level = LL_INF; }
+int clog_init(void) {
+  if (clog_buf != NULL) {
+    return 0;
+  }
+
+  clog_buf = (char*)malloc(CLOG_BUF_SIZE);
+  if (NULL == clog_buf) {
+    return -1;
+  } else {
+    return 0;
+  }
+}
 
 // set the log level filter
 void clog_set_level(int level) { clog_level = level; }
