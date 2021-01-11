@@ -6,6 +6,30 @@
 int   clog_level = LOG_LEVEL;
 char* clog_buf   = NULL;
 //////////////////////////////////////////////
+// init the clog, put some initialize or resource option in here
+int clog_init(void) {
+  if (clog_buf != NULL) {
+    return 0;
+  }
+
+  clog_buf = (char*)malloc(CLOG_BUF_SIZE);
+  if (NULL == clog_buf) {
+    return -1;
+  } else {
+    return 0;
+  }
+}
+
+// set the log level filter
+void clog_set_level(int level) {
+  ;
+  clog_level = level;
+}
+
+int clog_get_level(void) {
+  ;
+  return clog_level;
+}
 
 void _clog(int log_level, char* fmt, ...) {
   if (fmt == 0 || strlen(fmt) == 0) {
@@ -35,55 +59,72 @@ void _clog(int log_level, char* fmt, ...) {
   }
 }
 
-// init the clog, put some initialize or resource option in here
-int clog_init(void) {
-  if (clog_buf != NULL) {
-    return 0;
+void _clog_hex(int level, uint8_t* data, uint16_t len) {
+
+  if (level >= clog_level) {
+    if (level == LL_INF) {
+      strcat(clog_buf, "[INF]:\r\n");
+    } else if (level == LL_WAR) {
+      strcat(clog_buf, "\033[43m[WAR]\033[0m:\r\n");
+    } else if (level == LL_ERR) {
+      strcat(clog_buf, "\033[41m[ERR]\033[0m:\r\n");
+    } else if (level == LL_RUN) {
+      strcat(clog_buf, "[RUN]:\r\n");
+    } else {
+      //do nothing
+    }
   }
+  clog_printf(clog_buf);
 
-  clog_buf = (char*)malloc(CLOG_BUF_SIZE);
-  if (NULL == clog_buf) {
-    return -1;
-  } else {
-    return 0;
-  }
-}
+  memset(clog_buf, 0, CLOG_BUF_SIZE);
 
-// set the log level filter
-void clog_set_level(int level) { clog_level = level; }
-
-int clog_get_level(void) { return clog_level; }
-
-void clog_hex(int level, uint8_t* data, uint16_t len) {
   if (level >= clog_level) {
     int i;
-    for (i = 0; i < len; i++) {
-      clog_printf("%02X ", data[i]);
+    int hex_bytes = CLOG_BUF_SIZE * 1000 / 3125;  // 每16个增加2个回车换行
+
+    for (i = 0; i < len && i < hex_bytes; i++) {
+      sprintf(clog_buf + strlen(clog_buf), "%02X ", data[i]);
       if (i % 16 == 15) {
-        clog_printf("\r\n");
+        sprintf(clog_buf + strlen(clog_buf), "%s", "\r\n");
       }
     }
-    if (i % 16 != 0) {
-      clog_printf("\r\n");
-    }
+
+    clog_printf(clog_buf);
   }
 }
 
-void clog_str_hex(int level, uint8_t* data, uint16_t len) {
+void _clog_mix(int level, uint8_t* data, uint16_t len) {
+  if (level >= clog_level) {
+    if (level == LL_INF) {
+      strcat(clog_buf, "[INF]:\r\n");
+    } else if (level == LL_WAR) {
+      strcat(clog_buf, "\033[43m[WAR]\033[0m:\r\n");
+    } else if (level == LL_ERR) {
+      strcat(clog_buf, "\033[41m[ERR]\033[0m:\r\n");
+    } else if (level == LL_RUN) {
+      strcat(clog_buf, "[RUN]:\r\n");
+    } else {
+      //do nothing
+    }
+  }
+  clog_printf(clog_buf);
+
+  memset(clog_buf, 0, CLOG_BUF_SIZE);
+
   if (level >= clog_level) {
     int i;
-    for (i = 0; i < len; i++) {
+    int hex_bytes = CLOG_BUF_SIZE * 1000 / 3125;  // 每16个增加2个回车换行
+
+    for (i = 0; i < len && i < hex_bytes; i++) {
       if (data[i] >= 0x20 && data[i] <= 0x7e) {
-        clog_printf("%c", data[i]);
+        sprintf(clog_buf + strlen(clog_buf), "%c ", data[i]);
       } else {
-        clog_printf("%02X ", data[i]);
+        sprintf(clog_buf + strlen(clog_buf), "%02X ", data[i]);
       }
       if (i % 16 == 15) {
-        clog_printf("\r\n");
+        sprintf(clog_buf + strlen(clog_buf), "%s", "\r\n");
       }
     }
-    if (i % 16 != 0) {
-      clog_printf("\r\n");
-    }
+    clog_printf(clog_buf);
   }
 }
