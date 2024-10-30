@@ -1,5 +1,3 @@
-// https://github.com/hiproz/clog.git
-
 #ifndef __CLOG_H__
 #define __CLOG_H__
 
@@ -9,193 +7,132 @@ extern "C" {
 
 #include "stdio.h"
 #include "string.h"
+#include "stdint.h"
+#include "dirent.h"
+#include <direct.h>
+#include "stdlib.h"
 
-//#define ENABLE_RTT // use rtt for clog
-#ifdef ENABLE_RTT
-#include "SEGGER_RTT.h"
-#define clog_printf(fmt, ...) SEGGER_RTT_printf(0, fmt, ##__VA_ARGS__)
-#endif
+#define PLATFORM_COMMON                0
+#define PLATFORM_RDA8910_CSDK_OPENLUAT 1
+#define PLATFORM_RDA8910_CSDK_NEOWAY   2
+#define PLATFORM_RTT                   3
 
-////////////////////////SDK 平台配置/////////////////////////////////////
-#define RDA8910_CSDK_OPENLUAT 0
-#define RDA8910_CSDK_NEOWAY   1
-
-#define SDK_PLATFORM RDA8910_CSDK_NEOWAY //RDA8910_CSDK_OPENLUAT
-////////////////////////////////////////////////////////////////
-#if (SDK_PLATFORM == RDA8910_CSDK_OPENLUAT)
+#define SDK_PLATFORM PLATFORM_COMMON
+#if (SDK_PLATFORM == PLATFORM_RDA8910_CSDK_OPENLUAT)
 #include "iot_debug.h"
 #include "am_openat.h"
 #define clog_printf IVTBL(print)
-#elif (SDK_PLATFORM == RDA8910_CSDK_NEOWAY)
-extern void osiTraceBasic(unsigned tag, unsigned nargs, const char *fmt, ...);
+#elif (SDK_PLATFORM == PLATFORM_RDA8910_CSDK_NEOWAY)
+extern void osiTraceBasic(unsigned tag, unsigned nargs, const char* fmt, ...);
 #define clog_printf(fmt, ...) osiTraceBasic(3, 0, fmt, ##__VA_ARGS__)
+#elif (SDK_PLATFORM == PLATFORM_RTT)
+#define clog_printf(fmt, ...) SEGGER_RTT_printf(0, fmt, ##__VA_ARGS__)
+#else
+#define clog_printf printf
+#endif
+
+#ifndef snprintf
+#define snprintf sprintf_s
 #endif
 
 // log level defination
 // LL:clog level
-#define LL_INF  0 // some infos
-#define LL_WAR  1 // warrnings
-#define LL_ERR  2 // errors
-#define LL_RUN  3 // some important running logs
-#define LL_NONE 4 // disable all the logs
+#define LL_DBG  0  // debug
+#define LL_WAR  1  // warrnings
+#define LL_ERR  2  // errors
+#define LL_RUN  3  // some important running logs
+#define LL_NONE 4  // disable all the logs
 
 ///////////////////////// setting before build /////////////////////////
-// 发送bufer长度实际调整
-#define CLOG_BUF_SIZE 512
-
-// 日志开关
-#define LOG_LEVEL LL_INF // 日志级别，此级别下的log不打印
-
-// 日志编译级别
-#define BUILD_LOG_LEVEL LL_INF // 编译级别，此级别下的log打印代码不参与编译,默认设置为RUN
-
-// 日志是否支持显示RTC时间
+#define CLOG_BUF_SIZE   1024
+#define LOG_LEVEL       LL_DBG
+#define BUILD_LOG_LEVEL LL_DBG
 #define ENABLE_DATETIME 0
 ////////////////////////////////////////////////////////
-#if ENABLE_DATETIME //depend on the platform 需要根据不同的平台适配
-// it is variaty that every platform get the rtc time。
-// 每个平台获取时间的实现都有所不同。
-// datetime :为长度为6的字节数组，返回年月日时分秒
-extern void clog_get_datetime(unsigned char *datetime);
+#if ENABLE_DATETIME
+extern void clog_get_datetime(unsigned char* datetime);
 #endif
 
 // clang-format off
+#if ENABLE_DATETIME
 #define CLOG_FORMAT_WITH_TIME { \
-  if(clog_init()) break; \
-  unsigned char datetime[6]={0}; \
-  clog_get_datetime(datetime); \
-  memset(clog_buf, 0, CLOG_BUF_SIZE); \
-  char *p = strrchr(__FILE__, '\\');  \
-  if (p != NULL) { \
-    snprintf(clog_buf, CLOG_BUF_SIZE - 1, "[%02u/%02u/%02u %02u:%02u:%02u] [%s:%d] ", \
-    datetime[5], datetime[4], datetime[3], datetime[2], datetime[1], datetime[0], strrchr(__FILE__, '\\') + 1, __LINE__); \
-  } else { \
-    snprintf(clog_buf, CLOG_BUF_SIZE - 1, "[%02u/%02u/%02u %02u:%02u:%02u %s:%d] ", \
-    datetime[5], datetime[4], datetime[3], datetime[2], datetime[1], datetime[0], strrchr(__FILE__, '/') + 1, __LINE__); \
-  } \
-}
+	unsigned char datetime[6] = { 0 }; \
+	clog_get_datetime(datetime); \
+	snprintf(clog_buf, CLOG_BUF_SIZE - 1, "[%02u/%02u/%02u %02u:%02u:%02u] ", \
+	datetime[5], datetime[4], datetime[3], datetime[2], datetime[1], datetime[0]); \
+	}
+#else 
+#define CLOG_FORMAT_WITH_TIME
+#endif
 
 #define CLOG_FORMAT { \
-  if(clog_init()) break; \
-  memset(clog_buf, 0, CLOG_BUF_SIZE); \
-  char *p = strrchr(__FILE__, '\\'); \
-  if (p != NULL) { \
-    snprintf(clog_buf, CLOG_BUF_SIZE - 1, "[%s:%d] ", \
-    strrchr(__FILE__, '\\') + 1, __LINE__); \
-  } else { \
-    snprintf(clog_buf, CLOG_BUF_SIZE - 1, "[%s:%d] ", \
-    strrchr(__FILE__, '/') + 1, __LINE__); \
-  } \
+	if (clog_init()) break; \
+	memset(clog_buf, 0, CLOG_BUF_SIZE); \
+	CLOG_FORMAT_WITH_TIME \
+	const char *p = strrchr(__FILE__, '\\'); \
+	if (p != NULL) { \
+	snprintf(clog_buf + strlen(clog_buf), CLOG_BUF_SIZE - 1, "[%s:%d] ", strrchr(__FILE__, '\\') + 1, __LINE__); \
+	} else { \
+		const char *p_linux = strrchr(__FILE__, '/'); \
+		if (p_linux != NULL) { \
+			snprintf(clog_buf + strlen(clog_buf), CLOG_BUF_SIZE - 1, "[%s:%d] ", p_linux + 1, __LINE__); \
+		} \
+		else { \
+				snprintf(clog_buf + strlen(clog_buf), CLOG_BUF_SIZE - 1, "[%s:%d] ", __FILE__, __LINE__); \
+			} \
+	} \
 }
 
-#if (SDK_PLATFORM == RDA8910_CSDK_NEOWAY || SDK_PLATFORM == RDA8910_CSDK_NEOWAY)
-#define _MACRO_SPLICE(x) x
-#define MACRO_SPLICE(x,y) _MACRO_SPLICE(x)_MACRO_SPLICE(y)
+#define MACRO_SPLICE(x,y) x##y
+
+// debug log
+#if (LL_DBG >= BUILD_LOG_LEVEL)
+#define clog_dbg(fmt,...)         do{CLOG_FORMAT _clog(LL_DBG, fmt, ##__VA_ARGS__);}while(0)
+#define clog_hex_dbg(data, len)   do{CLOG_FORMAT _clog_hex(LL_DBG, data, len);}while(0)
+#define clog_mix_dbg(data, len)   do{CLOG_FORMAT _clog_mix(LL_DBG, data, len);}while(0)
 #else
-#define _MACRO_SPLICE(x,y) x##y
-#define MACRO_SPLICE(x,y) _MACRO_SPLICE(x,y)
+#define clog_dbg(...)
 #endif
 
-// info log
-#if (LL_INF >= BUILD_LOG_LEVEL)
-#if ENABLE_DATETIME
-#define clog_inf(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(LL_INF,fmt,##__VA_ARGS__))
-#define clog_hex_inf(data, len)  do{MACRO_SPLICE(CLOG_FORMAT_WITH_TIME, _clog_hex(LL_INF, data, len));}while(0)
-#define clog_mix_inf(data, len)  do{MACRO_SPLICE(CLOG_FORMAT_WITH_TIME, _clog_mix(LL_INF, data, len));}while(0)
-#else
-#define clog_inf(fmt,...)  do{MACRO_SPLICE(CLOG_FORMAT, _clog(LL_INF, fmt, ##__VA_ARGS__));}while(0)
-#define clog_hex_inf(data, len)  do{MACRO_SPLICE(CLOG_FORMAT, _clog_hex(LL_INF, data, len));}while(0)
-#define clog_mix_inf(data, len)  do{MACRO_SPLICE(CLOG_FORMAT, _clog_mix(LL_INF, data, len));}while(0)
-#endif
-#else
-#define clog_inf(...)
-#endif
-
-
-// warning log
 #if (LL_WAR >= BUILD_LOG_LEVEL)
-#if ENABLE_DATETIME
-#define clog_war(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(LL_WAR,fmt,##__VA_ARGS__))
-#define clog_hex_war(data, len)  do{MACRO_SPLICE(CLOG_FORMAT_WITH_TIME, _clog_hex(LL_WAR, data, len));}while(0)
-#define clog_mix_war(data, len)  do{MACRO_SPLICE(CLOG_FORMAT_WITH_TIME, _clog_mix(LL_WAR, data, len));}while(0)
-#else
-#define clog_war(fmt,...)  do{MACRO_SPLICE(CLOG_FORMAT, _clog(LL_WAR, fmt, ##__VA_ARGS__));}while(0)
-#define clog_hex_war(data, len)  do{MACRO_SPLICE(CLOG_FORMAT, _clog_hex(LL_WAR, data, len));}while(0)
-#define clog_mix_war(data, len)  do{MACRO_SPLICE(CLOG_FORMAT, _clog_mix(LL_WAR, data, len));}while(0)
-#endif
+#define clog_war(fmt,...)         do{CLOG_FORMAT _clog(LL_WAR, fmt, ##__VA_ARGS__);}while(0)
+#define clog_hex_war(data, len)   do{CLOG_FORMAT _clog_hex(LL_WAR, data, len);}while(0)
+#define clog_mix_war(data, len)   do{CLOG_FORMAT _clog_mix(LL_WAR, data, len);}while(0)
 #else
 #define clog_war(...)
 #endif
 
 // error log
 #if (LL_ERR >= BUILD_LOG_LEVEL)
-#if ENABLE_DATETIME
-#define clog_err(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(LL_ERR,fmt,##__VA_ARGS__))
-#define clog_hex_err(data, len)  do{MACRO_SPLICE(CLOG_FORMAT_WITH_TIME, _clog_hex(LL_ERR, data, len));}while(0)
-#define clog_mix_err(data, len)  do{MACRO_SPLICE(CLOG_FORMAT_WITH_TIME, _clog_mix(LL_ERR, data, len));}while(0)
-#else
-#define clog_err(fmt,...)  do{MACRO_SPLICE(CLOG_FORMAT, _clog(LL_ERR, fmt, ##__VA_ARGS__));}while(0)
-#define clog_hex_err(data, len)  do{MACRO_SPLICE(CLOG_FORMAT, _clog_hex(LL_ERR, data, len));}while(0)
-#define clog_mix_err(data, len)  do{MACRO_SPLICE(CLOG_FORMAT, _clog_mix(LL_ERR, data, len));}while(0)
-#endif
+#define clog_err(fmt,...)         do{CLOG_FORMAT _clog(LL_ERR, fmt, ##__VA_ARGS__);}while(0)
+#define clog_hex_err(data, len)   do{CLOG_FORMAT _clog_hex(LL_ERR, data, len);}while(0)
+#define clog_mix_err(data, len)   do{CLOG_FORMAT _clog_mix(LL_ERR, data, len);}while(0)
 #else
 #define clog_err(...)
+#define clog_hex_err(...)
+#define clog_mix_err(...)
 #endif
 
 // running log
 #if (LL_RUN >= BUILD_LOG_LEVEL)
-#if ENABLE_DATETIME
-#define clog_run(fmt,...)  MACRO_SPLICE(CLOG_FORMAT_WITH_TIME,_clog(LL_RUN,fmt,##__VA_ARGS__))
-#define clog_hex_run(data, len)  do{MACRO_SPLICE(CLOG_FORMAT_WITH_TIME, _clog_hex(LL_RUN, data, len));}while(0)
-#define clog_mix_run(data, len)  do{MACRO_SPLICE(CLOG_FORMAT_WITH_TIME, _clog_mix(LL_RUN, data, len));}while(0)
-#else
-#define clog_run(fmt,...)  do{MACRO_SPLICE(CLOG_FORMAT, _clog(LL_RUN, fmt, ##__VA_ARGS__));}while(0)
-#define clog_hex_run(data, len)  do{MACRO_SPLICE(CLOG_FORMAT, _clog_hex(LL_RUN, data, len));}while(0)
-#define clog_mix_run(data, len)  do{MACRO_SPLICE(CLOG_FORMAT, _clog_mix(LL_RUN, data, len));}while(0)
-#endif
+#define clog_run(fmt,...)		do{CLOG_FORMAT _clog(LL_RUN, fmt, ##__VA_ARGS__);}while(0)
+#define clog_hex_run(data, len) do{CLOG_FORMAT _clog_hex(LL_RUN, data, len);}while(0)
+#define clog_mix_run(data, len) do{CLOG_FORMAT _clog_mix(LL_RUN, data, len);}while(0)
 #else
 #define clog_run(...)
 #endif
 // clang-format on
 
-void _clog(int log_level, char *fmt, ...);
-void _clog_hex(int level, uint8_t *data, uint16_t len);
-void _clog_mix(int level, uint8_t *data, uint16_t len);
+void _clog(int log_level, char* fmt, ...);
+void _clog_hex(int level, uint8_t* data, uint16_t len);
+void _clog_mix(int level, uint8_t* data, uint16_t len);
 ///////////////////////////////////////////////////////////////////////
-/**
- * @brief externed fuctions
- *
- */
-
-/**
- * clog_inf();
- * clog_war();
- * clog_err();
- * clog_run();
- */
-
-/**
- * @brief ini the clog resource
- *
- * @return int:0 success; other:failed
- */
-int clog_init(void);
-
-/**
- * @brief set the log level
- *
- * @param level reference to the macros :LL_INF...
- */
+int  clog_init(void);
 void clog_set_level(int level);
-
-/**
- * @brief get the log level
- *
- * @return int
- */
-int clog_get_level(void);
+int  clog_get_level(void);
+void clog_set_file_para(int enable, char* save_dir_path, int file_num, int file_size);
 ////////////////////////////////////////////
-extern char *clog_buf;
+extern char* clog_buf;
 
 #ifdef __cplusplus
 }

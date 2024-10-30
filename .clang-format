@@ -1,0 +1,46 @@
+BasedOnStyle: LLVM
+Language: Cpp
+ColumnLimit: 200
+# 允许对注释排版
+ReflowComments: false
+# 允许修改头文件顺序
+SortIncludes: false
+
+#括号风格
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  AfterEnum: false
+  AfterStruct: false
+  SplitEmptyFunction: false # 空函数，括号可以同行
+
+# 注释左对齐
+AlignTrailingComments: true
+# 单行函数也要换行
+AllowShortFunctionsOnASingleLine: false
+## 是否允许短if语句单行
+AllowShortIfStatementsOnASingleLine: true
+# 单行循环可以单行，比如while1 和空for等
+AllowShortLoopsOnASingleLine: true
+# 自动换行后，二元运算符总在前
+BreakBeforeBinaryOperators: true
+# 缩进宽度
+IndentWidth: 4
+# 连续声明时，对齐所有声明的变量名
+AlignConsecutiveDeclarations:   true
+# 针和引用的对齐: Left, Right, Middle
+PointerAlignment:   Left
+# 在C风格类型转换后添加空格
+SpaceAfterCStyleCast:   false
+# 在赋值运算符之前添加空格
+SpaceBeforeAssignmentOperators: true
+# 开圆括号之前添加一个空格: Never, ControlStatements, Always
+SpaceBeforeParens:  ControlStatements
+# 在空的圆括号中添加空格
+SpaceInEmptyParentheses:    false
+# 在尾随的评论前添加的空格数(只适用于//)
+SpacesBeforeTrailingComments:   2
+# 在尖括号的<后和>前添加空格
+SpacesInAngles: true
+# 宏赋值对齐
+AlignConsecutiveMacros: true
