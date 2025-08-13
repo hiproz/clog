@@ -10,7 +10,7 @@ SortIncludes: false
 BreakBeforeBraces: Custom
 BraceWrapping:
   AfterFunction: true
-  AfterEnum: false
+  AfterEnum: true     # 修改为 true，强制枚举的左括号换行
   AfterStruct: false
   SplitEmptyFunction: false # 空函数，括号可以同行
 
@@ -44,3 +44,8 @@ SpacesBeforeTrailingComments:   2
 SpacesInAngles: true
 # 宏赋值对齐
 AlignConsecutiveMacros: true
+# 枚举格式化配置
+AllowShortEnumsOnASingleLine: false
+AlignArrayOfStructures: Right
+KeepEmptyLinesAtTheStartOfBlocks: true
+MaxEmptyLinesToKeep: 1

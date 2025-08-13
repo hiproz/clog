@@ -8,15 +8,31 @@ extern "C" {
 #include "stdio.h"
 #include "string.h"
 #include "stdint.h"
-#include "dirent.h"
-#include <direct.h>
 #include "stdlib.h"
 
+#if defined(__GNUC__) && defined(_WIN32)
+#include "dirent.h"
+#include <direct.h>
+#endif
+
+#define TRUE  1
+#define FALSE 0
+
+/** 不同的打印平台 */
 #define PLATFORM_COMMON                0
 #define PLATFORM_RDA8910_CSDK_OPENLUAT 1
 #define PLATFORM_RDA8910_CSDK_NEOWAY   2
 #define PLATFORM_RTT                   3
 
+
+// 是否支持把日志存储在设备本地，对于一些嵌入式设备，可能没有足够的存储空间
+// 如果不支持本地存储，日志会直接打印到控制台
+#define SUPPORT_LOC_SAVE FALSE
+
+/**
+ * @brief 适配不同平台的底层打印接口
+ * 
+ */
 #define SDK_PLATFORM PLATFORM_COMMON
 #if (SDK_PLATFORM == PLATFORM_RDA8910_CSDK_OPENLUAT)
 #include "iot_debug.h"
@@ -31,23 +47,26 @@ extern void osiTraceBasic(unsigned tag, unsigned nargs, const char* fmt, ...);
 #define clog_printf printf
 #endif
 
-#ifndef snprintf
-#define snprintf sprintf_s
-#endif
+// #ifndef snprintf
+// #define snprintf sprintf_s
+// #endif
 
-// log level defination
-// LL:clog level
-#define LL_DBG  0  // debug
-#define LL_WAR  1  // warrnings
-#define LL_ERR  2  // errors
-#define LL_RUN  3  // some important running logs
-#define LL_NONE 4  // disable all the logs
+
+enum CLOG_LEVEL
+{
+    LL_DBG = 0,
+    LL_INF = 1,
+    LL_WAR = 2,
+    LL_ERR = 3,
+    LL_RUN = 4,// some important running logs,always displayed
+    LL_NONE = 5
+};
 
 ///////////////////////// setting before build /////////////////////////
-#define CLOG_BUF_SIZE   1024
+#define CLOG_BUF_SIZE   512
 #define LOG_LEVEL       LL_DBG
 #define BUILD_LOG_LEVEL LL_DBG
-#define ENABLE_DATETIME 0
+#define ENABLE_DATETIME FALSE
 ////////////////////////////////////////////////////////
 #if ENABLE_DATETIME
 extern void clog_get_datetime(unsigned char* datetime);
@@ -66,7 +85,6 @@ extern void clog_get_datetime(unsigned char* datetime);
 #endif
 
 #define CLOG_FORMAT { \
-	if (clog_init()) break; \
 	memset(clog_buf, 0, CLOG_BUF_SIZE); \
 	CLOG_FORMAT_WITH_TIME \
 	const char *p = strrchr(__FILE__, '\\'); \
@@ -127,10 +145,11 @@ void _clog(int log_level, char* fmt, ...);
 void _clog_hex(int level, uint8_t* data, uint16_t len);
 void _clog_mix(int level, uint8_t* data, uint16_t len);
 ///////////////////////////////////////////////////////////////////////
-int  clog_init(void);
-void clog_set_level(int level);
+int  clog_init(int level);
 int  clog_get_level(void);
+#if(SUPPORT_LOC_SAVE)
 void clog_set_file_para(int enable, char* save_dir_path, int file_num, int file_size);
+#endif	
 ////////////////////////////////////////////
 extern char* clog_buf;
 

@@ -1,17 +1,21 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include "clog.h"
-#include "sys/stat.h"
 #include <time.h>
+
+#if (SUPPORT_LOC_SAVE)
 #ifdef _WIN32
 #include "direct.h"
 #else
+#if defined(__GNUC__) && defined(__linux__)
+#include "sys/stat.h"
 #include "sys/types.h"
+#endif
+#endif
 #endif
 
 int   clog_level = LOG_LEVEL;
 char* clog_buf = NULL;
-int   clog_file_enable = 0;  // 默认只打印在console，如果开了开关，打印的内容会同步存储日志文件
 char  clog_file_path[128] = {0};
 int   clog_file_num = 10;
 int   clog_file_size = 10;
@@ -20,39 +24,40 @@ int   current_file_size = 0;
 int   current_file_num = 0;
 int   current_file_index = 0;
 
+#if (SUPPORT_LOC_SAVE)
 typedef struct {
     struct stat status;
     char        file_name[64];  // onley file name
 } file_stru;
 
 file_stru* file_list = NULL;
+#endif
+
 //////////////////////////////////////////////
 // init the clog, put some initialize or resource option in here
-int clog_init(void)
+int clog_init(int level)
 {
+    clog_level = level;
+
     if (clog_buf != NULL) {
-        return 0;
+        free(clog_buf);
+        clog_buf = NULL;
     }
 
     clog_buf = (char*)malloc(CLOG_BUF_SIZE);
-    if (NULL == clog_buf) {
-        return -1;
-    } else {
-        return 0;
+    if (clog_buf == NULL) {
+        return -1;  // memory allocation failed
     }
-}
+    memset(clog_buf, 0, CLOG_BUF_SIZE);
 
-// set the log level filter
-void clog_set_level(int level)
-{
-    clog_level = level;
+    return 0;  // success
 }
 
 int clog_get_level(void)
 {
     return clog_level;
 }
-
+#if (SUPPORT_LOC_SAVE)
 int compare(const void* a, const void* b)
 {
     struct stat* stat_a = &((file_stru*)a)->status;
@@ -114,11 +119,17 @@ void printFilesByModifiedTime(const char* directoryPath)
     current_file_num = file_count;
     current_file_index %= clog_file_num;
 }
-
+/**
+ * @brief 设置日志目录，实现文件循环删除功能
+ * 
+ * @param enable 
+ * @param save_dir_path 
+ * @param file_num 
+ * @param file_size 
+ */
 void clog_set_file_para(int enable, char* save_dir_path, int file_num, int file_size)
 {
-    clog_file_enable = enable;
-    if (clog_file_enable != 0) {
+    if (enable != 0) {
         //printf("dir:%s\n", save_dir_path);
         strcpy(clog_file_path, save_dir_path);
 #ifdef _WIN32
@@ -197,12 +208,13 @@ void write_log_file(const char* log)
         }
     }
 }
+#endif
 
 void clog_process(char* log)
 {
-    if (clog_file_enable) {
-        write_log_file(log);
-    }
+#if (SUPPORT_LOC_SAVE)
+    write_log_file(log);
+ #endif   
     clog_printf("%s", log);
 }
 
