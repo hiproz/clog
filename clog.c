@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 #include "clog.h"
 #include <time.h>
 
@@ -14,49 +15,196 @@
 #endif
 #endif
 
-int   clog_level = LOG_LEVEL;
-char* clog_buf = NULL;
-char  clog_file_path[128] = {0};
-int   clog_file_num = 10;
-int   clog_file_size = 10;
-FILE* current_file = NULL;
-int   current_file_size = 0;
-int   current_file_num = 0;
-int   current_file_index = 0;
+typedef void (*custom_log_func_t)(const char* log_buf);
+
+clog_inf_t default_log = {0};
+clog_inf_t target_log = {0};
+
+#if ENABLE_DATETIME
+#if (SDK_PLATFORM == PLATFORM_COMMON)
+void clog_get_datetime(unsigned char* datetime)
+{
+    time_t     now;
+    struct tm* tm_ptr;
+    struct tm  tm_local;
+
+    if (datetime == NULL) {
+        return;
+    }
+
+    now = time(NULL);
+    if (now == (time_t)-1) {
+        memset(datetime, 0, 6);
+        return;
+    }
+
+    tm_ptr = localtime(&now);
+    if (tm_ptr == NULL) {
+        memset(datetime, 0, 6);
+        return;
+    }
+    tm_local = *tm_ptr;
+
+    datetime[0] = (unsigned char)tm_local.tm_sec;
+    datetime[1] = (unsigned char)tm_local.tm_min;
+    datetime[2] = (unsigned char)tm_local.tm_hour;
+    datetime[3] = (unsigned char)tm_local.tm_mday;
+    datetime[4] = (unsigned char)(tm_local.tm_mon + 1);
+    datetime[5] = (unsigned char)(((tm_local.tm_year + 1900) % 100));
+}
+#endif /* PLATFORM_COMMON */
+#endif /* ENABLE_DATETIME */
+
+static int clog_fmt_valid(const char* fmt)
+{
+    return fmt != NULL && fmt[0] != '\0';
+}
+
+static size_t clog_buf_used(const clog_inf_t* log)
+{
+    size_t i;
+
+    if (log == NULL || log->clog_buf == NULL) {
+        return 0U;
+    }
+    for (i = 0U; i < (size_t)CLOG_BUF_SIZE; ++i) {
+        if (log->clog_buf[i] == '\0') {
+            return i;
+        }
+    }
+    return (size_t)CLOG_BUF_SIZE;
+}
+
+static size_t clog_buf_left(const clog_inf_t* log)
+{
+    size_t used = clog_buf_used(log);
+    if (used >= (size_t)CLOG_BUF_SIZE) {
+        return 0U;
+    }
+    return (size_t)CLOG_BUF_SIZE - used - 1U;
+}
+
+static void clog_append_literal(clog_inf_t* log, const char* text)
+{
+    size_t used;
+    size_t left;
+    size_t copy_len;
+
+    if (log == NULL || log->clog_buf == NULL || text == NULL) {
+        return;
+    }
+
+    used = clog_buf_used(log);
+    left = clog_buf_left(log);
+    if (left == 0U) {
+        return;
+    }
+
+    copy_len = 0U;
+    while (copy_len < left && text[copy_len] != '\0') {
+        copy_len++;
+    }
+    memcpy(log->clog_buf + used, text, copy_len);
+    log->clog_buf[used + copy_len] = '\0';
+}
+
+static void clog_appendf(clog_inf_t* log, const char* fmt, ...)
+{
+    va_list args;
+    size_t  used;
+    size_t  left;
+
+    if (log == NULL || log->clog_buf == NULL || fmt == NULL) {
+        return;
+    }
+
+    used = clog_buf_used(log);
+    left = clog_buf_left(log);
+    if (left == 0U) {
+        return;
+    }
+
+    va_start(args, fmt);
+    (void)vsnprintf(log->clog_buf + used, left + 1U, fmt, args);
+    va_end(args);
+}
+
+static void clog_append_level_tag(clog_inf_t* log, int level, const char* suffix)
+{
+    if (level == LL_DBG) {
+        clog_append_literal(log, "[DBG]");
+    } else if (level == LL_WAR) {
+        clog_append_literal(log, "\033[43m[WAR]\033[0m");
+    } else if (level == LL_ERR) {
+        clog_append_literal(log, "\033[41m[ERR]\033[0m");
+    } else if (level == LL_RUN) {
+        clog_append_literal(log, "[RUN]");
+    } else {
+        return;
+    }
+    if (suffix != NULL) {
+        clog_append_literal(log, suffix);
+    }
+}
 
 #if (SUPPORT_LOC_SAVE)
 typedef struct {
     struct stat status;
-    char        file_name[64];  // onley file name
+    char        file_name[64];
 } file_stru;
 
 file_stru* file_list = NULL;
 #endif
 
-//////////////////////////////////////////////
-// init the clog, put some initialize or resource option in here
-int clog_init(int level)
+int clog_init(clog_inf_t* log, int level)
 {
-    clog_level = level;
-
-    if (clog_buf != NULL) {
-        free(clog_buf);
-        clog_buf = NULL;
+    if (log == NULL) {
+        return -1;
     }
 
-    clog_buf = (char*)malloc(CLOG_BUF_SIZE);
-    if (clog_buf == NULL) {
-        return -1;  // memory allocation failed
+    log->clog_level = level;
+    log->clog_file_num = 10;
+    log->clog_file_size = 1;
+
+    if (log->clog_buf != NULL) {
+        free(log->clog_buf);
+        log->clog_buf = NULL;
     }
-    memset(clog_buf, 0, CLOG_BUF_SIZE);
 
-    return 0;  // success
+    log->clog_buf = (char*)malloc(CLOG_BUF_SIZE);
+    if (log->clog_buf == NULL) {
+        return -1;
+    }
+    memset(log->clog_buf, 0, CLOG_BUF_SIZE);
+
+    return 0;
 }
 
-int clog_get_level(void)
+void clog_deinit(clog_inf_t* log)
 {
-    return clog_level;
+    if (log == NULL) {
+        return;
+    }
+    if (log->clog_buf != NULL) {
+        free(log->clog_buf);
+        log->clog_buf = NULL;
+    }
+#if (SUPPORT_LOC_SAVE)
+    if (log->current_file != NULL) {
+        fclose(log->current_file);
+        log->current_file = NULL;
+    }
+#endif
 }
+
+int clog_get_level(clog_inf_t* log)
+{
+    if (log == NULL) {
+        return LL_NONE;
+    }
+    return log->clog_level;
+}
+
 #if (SUPPORT_LOC_SAVE)
 int compare(const void* a, const void* b)
 {
@@ -77,35 +225,27 @@ void printFilesByModifiedTime(const char* directoryPath)
         printf("can't open dir:%s\n", directoryPath);
         return;
     }
-    //printf("start scan the dir:%s\n", directoryPath);
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
             continue;
         }
 
-        //printf("file name :%s\n", entry->d_name);
-
         sprintf(filePath, "%s\\%s", directoryPath, entry->d_name);
-        //printf("file path :%s\n", filePath);
 
         if (file_count >= clog_file_num) {
             if (remove(filePath) == 0) {
-                //printf(" remove the exceed file success\n");
             } else {
                 printf("remove failed\n");
             }
             continue;
         } else {
             struct stat file_stat;
-            time_t      modified_time;
 
             if (stat(filePath, &file_stat) == -1) {
                 printf("get file info failed\n");
                 break;
             }
 
-            modified_time = file_stat.st_mtime;
-            //printf("file time:%ld\n", modified_time);
             file_list[file_count].status = file_stat;
             strcpy(file_list[file_count].file_name, entry->d_name);
             file_count++;
@@ -119,18 +259,11 @@ void printFilesByModifiedTime(const char* directoryPath)
     current_file_num = file_count;
     current_file_index %= clog_file_num;
 }
-/**
- * @brief 设置日志目录，实现文件循环删除功能
- * 
- * @param enable 
- * @param save_dir_path 
- * @param file_num 
- * @param file_size 
- */
+
+/** Configure log directory and rotating file limits (SUPPORT_LOC_SAVE only). */
 void clog_set_file_para(int enable, char* save_dir_path, int file_num, int file_size)
 {
     if (enable != 0) {
-        //printf("dir:%s\n", save_dir_path);
         strcpy(clog_file_path, save_dir_path);
 #ifdef _WIN32
         strcat(clog_file_path, "\\logs");
@@ -138,11 +271,7 @@ void clog_set_file_para(int enable, char* save_dir_path, int file_num, int file_
         strcat(clog_file_path, "/logs");
 #endif
         int result = _mkdir(clog_file_path);
-        if (result == 0) {
-            //printf("create dir:%s success!\n", clog_file_path);
-        } else {
-            //printf("dir exist:%!\n", clog_file_path);
-        }
+        (void)result;
 
         clog_file_num = file_num;
         clog_file_size = file_size;
@@ -156,33 +285,30 @@ void clog_set_file_para(int enable, char* save_dir_path, int file_num, int file_
     }
 }
 
-void write_log_file(const char* log)
+void write_log_file(clog_inf_t* log, const char* log_data)
 {
-    if (current_file) {
-        //printf("current file size:%d %d\n", current_file_size, clog_file_size);
-        if (current_file_size < clog_file_size) {
-            fprintf(current_file, "%s", log);
-            current_file_size += strlen(log);
-            fflush(current_file);
+    if (log->current_file) {
+        if (log->current_file_size < log->clog_file_size) {
+            fprintf(log->current_file, "%s", log_data);
+            log->current_file_size += strlen(log_data);
+            fflush(log->current_file);
             return;
         } else {
-            //printf("close new file\n");
-            fclose(current_file);
-            current_file_size = 0;
-            current_file = NULL;
+            fclose(log->current_file);
+            log->current_file_size = 0;
+            log->current_file = NULL;
         }
     }
 
-    if (!current_file) {
-        if (current_file_num >= clog_file_num) {
+    if (!log->current_file) {
+        if (log->current_file_num >= log->clog_file_num) {
             char tmp_path[128] = {0};
-            snprintf(tmp_path, sizeof(tmp_path), "%s\\%s", clog_file_path, file_list[current_file_index].file_name);
+            snprintf(tmp_path, sizeof(tmp_path), "%s\\%s", log->clog_file_path, log->file_list[log->current_file_index].file_name);
             if (remove(tmp_path) == 0) {
-                //printf("remove the file success:%s\n", tmp_path);
             } else {
                 printf("remove failed:%s\n", tmp_path);
             }
-            current_file_num--;
+            log->current_file_num--;
         }
         time_t    t = time(NULL);
         struct tm tm = *localtime(&t);
@@ -190,129 +316,170 @@ void write_log_file(const char* log)
         char      filename[64] = {0};
         sprintf(filename, "%d_%02d_%02d_%02d_%02d_%02d-%03d.txt", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, rand() % 1000);
 #ifdef _WIN32
-        sprintf(file_path, "%s\\%s", clog_file_path, filename);
+        sprintf(file_path, "%s\\%s", log->clog_file_path, filename);
 #else
-        sprintf(file_path, "%s/%ds", clog_file_path, filename);
+        sprintf(file_path, "%s/%s", log->clog_file_path, filename);
 #endif
-        current_file = fopen(file_path, "w");
-        if (current_file) {
-            //printf("create new file sucess:%s\n", file_path);
-            current_file_size = 0;
-            fprintf(current_file, "%s", log);
-            current_file_size += strlen(log);
-            fflush(current_file);
+        log->current_file = fopen(file_path, "w");
+        if (log->current_file) {
+            log->current_file_size = 0;
+            fprintf(log->current_file, "%s", log_data);
+            log->current_file_size += strlen(log_data);
+            fflush(log->current_file);
 
-            strcpy(file_list[current_file_index].file_name, filename);
-            current_file_index = (current_file_index + 1) % clog_file_num;
-            current_file_num++;
+            strcpy(log->file_list[log->current_file_index].file_name, filename);
+            log->current_file_index = (log->current_file_index + 1) % log->clog_file_num;
+            log->current_file_num++;
         }
     }
 }
 #endif
 
-void clog_process(char* log)
+void clog_process(clog_inf_t* log, char* log_data)
 {
 #if (SUPPORT_LOC_SAVE)
-    write_log_file(log);
- #endif   
-    clog_printf("%s", log);
+    write_log_file(log, log_data);
+#else
+    (void)log;
+#endif
+    clog_printf("%s", log_data);
 }
 
-void _clog(int log_level, char* fmt, ...)
+#if ENABLE_DATETIME
+static void clog_append_datetime_prefix(clog_inf_t* log)
 {
-    if (fmt == 0 || strlen(fmt) == 0) {
+    unsigned char datetime[6] = {0};
+
+    clog_get_datetime(datetime);
+    clog_appendf(log, "[%02u/%02u/%02u %02u:%02u:%02u] ", datetime[5], datetime[4], datetime[3], datetime[2], datetime[1], datetime[0]);
+}
+#endif
+
+static void clog_append_file_line_prefix(clog_inf_t* log, const char* file, int line)
+{
+    const char* file_name = file;
+    const char* win_sep;
+    const char* unix_sep;
+
+    win_sep = strrchr(file, '\\');
+    unix_sep = strrchr(file, '/');
+    if (win_sep != NULL) {
+        file_name = win_sep + 1;
+    } else if (unix_sep != NULL) {
+        file_name = unix_sep + 1;
+    }
+
+    clog_appendf(log, "[%s:%d] ", file_name, line);
+}
+
+void clog_format_prefix(clog_inf_t* log, const char* file, int line)
+{
+    if (log == NULL || log->clog_buf == NULL || file == NULL) {
         return;
     }
-    if (log_level >= clog_level) {
-        if (log_level == LL_DBG) {
-            strcat(clog_buf, "[DBG] ");
-        } else if (log_level == LL_WAR) {
-            strcat(clog_buf, "\033[43m[WAR]\033[0m ");
-        } else if (log_level == LL_ERR) {
-            strcat(clog_buf, "\033[41m[ERR]\033[0m ");
-        } else if (log_level == LL_RUN) {
-            strcat(clog_buf, "[RUN] ");
-        } else {
-            //do nothing
-        }
 
-        va_list args;
-        va_start(args, fmt);
-        vsnprintf(clog_buf + strlen(clog_buf), CLOG_BUF_SIZE - 1 - strlen(clog_buf), fmt, args);
-        strcat(clog_buf, "\n");
-        va_end(args);
+    memset(log->clog_buf, 0, CLOG_BUF_SIZE);
 
-        clog_process(clog_buf);
-    }
+#if ENABLE_DATETIME
+    clog_append_datetime_prefix(log);
+#endif
+    clog_append_file_line_prefix(log, file, line);
 }
 
-void _clog_hex(int level, uint8_t* data, uint16_t len)
+void _clog(clog_inf_t* log, int level, const char* fmt, ...)
 {
-    if (level >= clog_level) {
-        if (level == LL_DBG) {
-            strcat(clog_buf, "[DBG]:\n");
-        } else if (level == LL_WAR) {
-            strcat(clog_buf, "\033[43m[WAR]\033[0m:\n");
-        } else if (level == LL_ERR) {
-            strcat(clog_buf, "\033[41m[ERR]\033[0m:\n");
-        } else if (level == LL_RUN) {
-            strcat(clog_buf, "[RUN]:\n");
-        } else {
-            //do nothing
-        }
+    va_list args;
+
+    if (log == NULL || log->clog_buf == NULL || !clog_fmt_valid(fmt)) {
+        return;
     }
-    clog_process(clog_buf);
-
-    memset(clog_buf, 0, CLOG_BUF_SIZE);
-
-    if (level >= clog_level) {
-        int i;
-        int hex_bytes = CLOG_BUF_SIZE * 1000 / 3125;
-
-        for (i = 0; i < len && i < hex_bytes; i++) {
-            sprintf(clog_buf + strlen(clog_buf), "%02X ", data[i]);
-            if (i % 16 == 15) {
-                sprintf(clog_buf + strlen(clog_buf), "%s", "\n");
-            }
-        }
-
-        clog_process(clog_buf);
+    if (level < log->clog_level) {
+        return;
     }
+
+    clog_append_level_tag(log, level, " ");
+    va_start(args, fmt);
+    (void)vsnprintf(log->clog_buf + clog_buf_used(log), clog_buf_left(log) + 1U, fmt, args);
+    va_end(args);
+    clog_append_literal(log, "\n");
+    clog_process(log, log->clog_buf);
 }
 
-void _clog_mix(int level, uint8_t* data, uint16_t len)
+void _clog_hex(clog_inf_t* log, int level, const uint8_t* data, uint16_t len)
 {
-    if (level >= clog_level) {
-        if (level == LL_DBG) {
-            strcat(clog_buf, "[DBG]:\n");
-        } else if (level == LL_WAR) {
-            strcat(clog_buf, "\033[43m[WAR]\033[0m:\n");
-        } else if (level == LL_ERR) {
-            strcat(clog_buf, "\033[41m[ERR]\033[0m:\n");
-        } else if (level == LL_RUN) {
-            strcat(clog_buf, "[RUN]:\n");
+    int i;
+
+    if (log == NULL || log->clog_buf == NULL || data == NULL) {
+        return;
+    }
+    if (level < log->clog_level) {
+        return;
+    }
+
+    clog_append_level_tag(log, level, ":");
+    for (i = 0; i < len && i < (int)CLOG_HEX_MAX_BYTES; i++) {
+        clog_appendf(log, "%02X ", data[i]);
+    }
+    clog_append_literal(log, "\n");
+    clog_process(log, log->clog_buf);
+}
+
+void _clog_mix(clog_inf_t* log, int level, const uint8_t* data, uint16_t len)
+{
+    int i;
+
+    if (log == NULL || log->clog_buf == NULL || data == NULL) {
+        return;
+    }
+    if (level < log->clog_level) {
+        return;
+    }
+
+    clog_append_level_tag(log, level, ":\n");
+    for (i = 0; i < len && i < (int)CLOG_HEX_MAX_BYTES; i++) {
+        if (data[i] >= 0x20 && data[i] <= 0x7e) {
+            clog_appendf(log, "%c ", data[i]);
         } else {
-            //do nothing
+            clog_appendf(log, "%02X ", data[i]);
         }
     }
-    clog_process(clog_buf);
+    clog_append_literal(log, "\n");
+    clog_process(log, log->clog_buf);
+}
 
-    memset(clog_buf, 0, CLOG_BUF_SIZE);
+void _clog_custom(clog_inf_t* log, void* func, int level, const char* fmt, ...)
+{
+    va_list args;
 
-    if (level >= clog_level) {
-        int i;
-        int hex_bytes = CLOG_BUF_SIZE * 1000 / 3125;
-
-        for (i = 0; i < len && i < hex_bytes; i++) {
-            if (data[i] >= 0x20 && data[i] <= 0x7e) {
-                sprintf(clog_buf + strlen(clog_buf), "%c ", data[i]);
-            } else {
-                sprintf(clog_buf + strlen(clog_buf), "%02X ", data[i]);
-            }
-            if (i % 16 == 15) {
-                sprintf(clog_buf + strlen(clog_buf), "%s", "\n");
-            }
-        }
-        clog_process(clog_buf);
+    if (log == NULL || log->clog_buf == NULL || func == NULL || !clog_fmt_valid(fmt)) {
+        return;
     }
+    if (level < log->clog_level) {
+        return;
+    }
+
+    va_start(args, fmt);
+    (void)vsnprintf(log->clog_buf + clog_buf_used(log), clog_buf_left(log) + 1U, fmt, args);
+    va_end(args);
+    clog_append_literal(log, "\n");
+    ((custom_log_func_t)func)(log->clog_buf);
+}
+
+void _clog_hex_custom(clog_inf_t* log, void* func, int level, const uint8_t* data, uint16_t len)
+{
+    int i;
+
+    if (log == NULL || log->clog_buf == NULL || func == NULL || data == NULL) {
+        return;
+    }
+    if (level < log->clog_level) {
+        return;
+    }
+
+    clog_append_level_tag(log, level, ":");
+    for (i = 0; i < len && i < (int)CLOG_HEX_MAX_BYTES; i++) {
+        clog_appendf(log, "%02X ", data[i]);
+    }
+    clog_append_literal(log, "\n");
+    ((custom_log_func_t)func)(log->clog_buf);
 }
